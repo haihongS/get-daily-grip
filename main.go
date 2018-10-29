@@ -5,12 +5,60 @@ import (
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/tealeg/xlsx"
+	"html/template"
+	"net/http"
+	"os"
 	"strconv"
+	"time"
 )
 
 func main() {
+	http.HandleFunc("/", httpIndex)
+	http.Handle("/data/", http.StripPrefix("/data/", http.FileServer(http.Dir("./data"))))
+	http.HandleFunc("/login", login)
+	go delFile()
+	http.ListenAndServe(":6688", nil)
+}
 
+func httpIndex(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte(`hell`))
+	r.ParseForm()
+	fmt.Println(r)
+}
+
+func login(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	if r.Method == "GET" {
+		t, err := template.ParseFiles("html/login.html")
+		checkErr(err)
+		t.Execute(w, nil)
+	} else {
+		username := r.FormValue("username")
+		password := r.FormValue("password")
+		if username != "aha" || password != "aha" {
+			w.Write([]byte("Login fail!!!!!!!"))
+		} else {
+			w.Write([]byte("Login success, waiting a little time to check file"))
+			getData()
+		}
+	}
+}
+
+func delFile() {
+	for {
+		time.Sleep(5 * 60 * time.Second)
+		fileLoca := "./data/water.xlsx"
+		err := os.Remove(fileLoca)
+		if err != nil {
+			fmt.Println("file remove Error!")
+			fmt.Printf("%s\n", err)
+		}
+	}
+}
+
+func getData() {
 	db, err := sql.Open("mysql", `user:password@tcp(ip:port)/dbname?charset=utf8`)
+
 	checkErr(err)
 	defer db.Close()
 
@@ -27,7 +75,7 @@ func main() {
 	fruitWaterBill(db, file)
 	spWithdrawal(db, file)
 
-	err = file.Save("aha.xlsx")
+	err = file.Save("./data/water.xlsx")
 	checkErr(err)
 }
 
@@ -43,7 +91,8 @@ func waterBill(db *sql.DB, file *xlsx.File) {
 		where
 		  tb_order.order_status = 5
 		  and tb_order.order_id not in ('1538421415409253', '1538422805852253', '1538423188108253', '1538424399466253', '1538428554132150', '1538428638041820')
-		order by timestamp;`
+		order by timestamp
+		limit 100000;`
 	rows, err := db.Query(sentence)
 	checkErr(err)
 
